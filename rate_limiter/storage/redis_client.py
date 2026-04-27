@@ -71,3 +71,24 @@ class RedisRateLimiter:
             logger.warning(f"Redis unavailable, circuit breaker tripped: {e}")
             self._circuit_breaker_tripped = True
             return True, limit  # Fail-Open strategy
+
+    async def set_rule(self, client_id: str, algorithm: str, params: dict):
+        """Stores a custom rate limit rule for a client in a Redis Hash."""
+        key = f"rule:{client_id}"
+        mapping = {"algorithm": algorithm}
+        mapping.update({k: str(v) for k, v in params.items()})
+        await self.client.hset(key, mapping=mapping)
+        return True
+
+    async def get_rule(self, client_id: str):
+        """Fetches the custom rate limit rule for a client."""
+        key = f"rule:{client_id}"
+        rule = await self.client.hgetall(key)
+        if not rule:
+            return {"algorithm": "token_bucket", "capacity": 10, "refill_rate": 1.0} # Default
+        
+        formatted_rule = {"algorithm": rule["algorithm"]}
+        for k, v in rule.items():
+            if k != "algorithm":
+                formatted_rule[k] = float(v) if '.' in v else int(v)
+        return formatted_rule
