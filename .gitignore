@@ -17,3 +17,8 @@ htmlcov/
 # IDEs
 .vscode/
 .idea/
+
+# Monitoring state
+monitoring/grafana/grafana.db
+monitoring/grafana/png/
+monitoring/grafana/csv/
