@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     yield # Application runs here
     
     # Shutdown: Close Redis connection gracefully
-    await app.state.redis_client.client.aclose()
+    await app.state.redis_client.close()
 
 app = FastAPI(
     title="Distributed Rate Limiter API",
