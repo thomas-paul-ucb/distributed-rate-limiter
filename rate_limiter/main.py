@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from rate_limiter.storage.redis_client import RedisRateLimiter
+from rate_limiter.storage.postgres_client import PostgresClient
 from rate_limiter.api.routes import router
 import os
 from rate_limiter.middleware import RateLimitMiddleware

@@ -5,19 +5,51 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
-class RuleCreateRequest(BaseModel):
+# --- POSTGRES RULES ENGINE ---
+
+class RuleCreate(BaseModel):
     client_id: str
+    endpoint: str = "global"
     algorithm: str
-    params: dict
+    limit_count: int = 10
+    window_seconds: int = 60
 
 @router.post("/rules")
-async def create_rule(rule_data: RuleCreateRequest, request: Request):
-    redis_client = request.app.state.redis_client
-    await redis_client.set_rule(rule_data.client_id, rule_data.algorithm, rule_data.params)
-    return {"status": "success", "message": f"Rule updated for {rule_data.client_id}"}
+async def create_rule(rule: RuleCreate, request: Request):
+    """Admin endpoint to create or update a rate limit rule in Postgres."""
+    pg_client = request.app.state.pg_client
     
+    if rule.algorithm not in ["token_bucket", "sliding_window"]:
+        raise HTTPException(status_code=400, detail="Invalid algorithm. Use 'token_bucket' or 'sliding_window'.")
+
+    # Save directly to Postgres (Persistent Storage)
+    await pg_client.set_rule(
+        client_id=rule.client_id,
+        endpoint=rule.endpoint,
+        algorithm=rule.algorithm,
+        limit_count=rule.limit_count,
+        window_seconds=rule.window_seconds
+    )
+    
+    return {"message": "Rule successfully saved to database.", "rule": rule.model_dump()}
+
+@router.get("/rules/{client_id}")
+async def get_rule(client_id: str, request: Request, endpoint: str = "global"):
+    """Admin endpoint to fetch a specific rule from Postgres."""
+    pg_client = request.app.state.pg_client
+    rule = await pg_client.get_rule(client_id, endpoint)
+    
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found for this client and endpoint.")
+        
+    return {"rule": rule}
+
+
+# --- REDIS DATA PLANE CHECK ---
+
 @router.post("/check", response_model=RateLimitResponse)
 async def check_rate_limit(request_data: RateLimitRequest, request: Request):
+    """Direct testing endpoint to hit the Redis data plane."""
     redis_client = request.app.state.redis_client
 
     if request_data.algorithm == "token_bucket":
