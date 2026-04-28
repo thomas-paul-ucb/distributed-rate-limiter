@@ -3,9 +3,10 @@ from contextlib import asynccontextmanager
 from rate_limiter.storage.redis_client import RedisRateLimiter
 from rate_limiter.storage.postgres_client import PostgresClient
 from rate_limiter.api.routes import router
-import os
 from rate_limiter.middleware import RateLimitMiddleware
+from rate_limiter.utils.metrics import active_clients # Import this at the top
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -16,7 +17,6 @@ async def lifespan(app: FastAPI):
     app.state.redis_client = redis_client
     
     # --- POSTGRES STARTUP ---
-    # Matches the credentials in your docker-compose
     db_url = os.getenv("DATABASE_URL", "postgresql://postgres:secret@localhost:5432/ratelimiter")
     pg_client = PostgresClient(db_url=db_url)
     await pg_client.connect()
@@ -34,6 +34,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Important: Middleware handles the metric recording for each request
 app.add_middleware(RateLimitMiddleware)
 app.include_router(router, prefix="/api/v1")
 
@@ -47,13 +48,18 @@ async def health_check():
 
 @app.get("/metrics")
 async def metrics():
-    # Update active_clients gauge before scraping
-    # This is a bit heavy for every scrape, but fine for this scale
-    # In production, you'd update this on a background task
-    pg_client = app.state.pg_client
-    async with pg_client.pool.acquire() as conn:
-        count = await conn.fetchval("SELECT count(DISTINCT client_id) FROM rate_limit_rules")
-        from rate_limiter.utils.metrics import active_clients
-        active_clients.set(count)
-        
+    """Endpoint for Prometheus to scrape metrics."""
+    # 1. Update the Active Clients gauge by counting rules in Postgres
+    try:
+        # Check if pg_client exists in state to avoid 500 errors during startup/shutdown
+        pg_client = getattr(app.state, "pg_client", None)
+        if pg_client and pg_client.pool:
+            async with pg_client.pool.acquire() as conn:
+                count = await conn.fetchval("SELECT count(DISTINCT client_id) FROM rate_limit_rules")
+                active_clients.set(count if count is not None else 0)
+    except Exception as e:
+        # Log the error but don't crash the metrics page
+        print(f"Error updating metrics from Postgres: {e}")
+
+    # 2. Return all Prometheus metrics (including those recorded in middleware)
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
