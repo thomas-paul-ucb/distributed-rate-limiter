@@ -1,9 +1,21 @@
 from fastapi import APIRouter, HTTPException, Request
 from rate_limiter.api.models import RateLimitRequest, RateLimitResponse
 import uuid
+from pydantic import BaseModel
 
 router = APIRouter()
 
+class RuleCreateRequest(BaseModel):
+    client_id: str
+    algorithm: str
+    params: dict
+
+@router.post("/rules")
+async def create_rule(rule_data: RuleCreateRequest, request: Request):
+    redis_client = request.app.state.redis_client
+    await redis_client.set_rule(rule_data.client_id, rule_data.algorithm, rule_data.params)
+    return {"status": "success", "message": f"Rule updated for {rule_data.client_id}"}
+    
 @router.post("/check", response_model=RateLimitResponse)
 async def check_rate_limit(request_data: RateLimitRequest, request: Request):
     redis_client = request.app.state.redis_client
