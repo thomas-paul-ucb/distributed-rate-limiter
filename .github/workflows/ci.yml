@@ -48,4 +48,5 @@ jobs:
           # Point the app to the GitHub Actions local databases
           REDIS_URL: redis://localhost:6379
           DATABASE_URL: postgresql://postgres:secret@localhost:5432/ratelimiter
+          PYTHONPATH: .
         run: pytest tests/ -v
