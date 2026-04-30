@@ -1,0 +1,8 @@
+monitoring/grafana/
+.git
+__pycache__
+*.pyc
+.env
+*.md
+load_tests/
+tests/
