@@ -21,4 +21,4 @@ htmlcov/
 # Monitoring state
 monitoring/grafana/grafana.db
 monitoring/grafana/png/
-monitoring/grafana/csv/
+monitoring/grafana/csv/monitoring/grafana/plugins/
