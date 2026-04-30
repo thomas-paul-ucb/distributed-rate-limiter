@@ -80,7 +80,7 @@ Load tested with Locust — 200 concurrent users, 10 users/sec spawn rate:
 
 ### AWS EC2 Benchmark (t3.micro)
 
-> ![Locust results](Locust load.png)
+> ![Locust results](Locust_load.png)
 
 **Note:** t3.micro constraints (1 vCPU, 1GB RAM) cap throughput relative to local results. CI/CD pipeline is fully operational — each push to `main` runs the test suite and redeploys automatically via GitHub Actions SSH to EC2.
 
@@ -90,7 +90,7 @@ Load tested with Locust — 200 concurrent users, 10 users/sec spawn rate:
 
 ### Grafana Dashboard
 
-> ![Grafana Dashboard showing load testing metrics](Grafana db.png)
+> ![Grafana Dashboard showing load testing metrics](Grafana_db.png)
 
 Prometheus scrapes `/metrics` every 5 seconds. Grafana dashboard available at `http://localhost:3000` (admin/admin).
 
