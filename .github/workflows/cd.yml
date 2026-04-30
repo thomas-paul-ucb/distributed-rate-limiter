@@ -20,5 +20,8 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ~/distributed-rate-limiter
+            sudo git fetch --all
+            sudo git reset --hard origin/main
+            sudo git clean -fd
             git pull origin main
             sudo docker compose up -d --build
