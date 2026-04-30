@@ -20,8 +20,12 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ~/distributed-rate-limiter
-            sudo git fetch --all
-            sudo git reset --hard origin/main
-            sudo git clean -fd
+            # 1. Take ownership back from Docker so Git doesn't get "Permission Denied"
+            sudo chown -R ubuntu:ubuntu .
+            # 2. Force Git to wipe away any files Grafana modified
+            git reset --hard origin/main
+            git clean -fd
             git pull origin main
+            # 3. Give the monitoring folder back to Grafana (User ID 472)
+            sudo chown -R 472:472 monitoring/
             sudo docker compose up -d --build

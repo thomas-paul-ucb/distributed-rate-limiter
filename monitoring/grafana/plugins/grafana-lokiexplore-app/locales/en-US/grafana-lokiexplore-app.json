@@ -193,10 +193,11 @@
         "placeholder-all-levels": "All levels"
       },
       "line-filter-variable": {
-        "aria-label-collapse-filter": "Collapse filter",
         "aria-label-remove-line-filter": "Remove line filter",
-        "line-filter": "Line filter",
-        "tooltip-collapse": "Collapse"
+        "line-filter": "Line filter"
+      },
+      "line-filter-variables-scene": {
+        "aria-label-add-line-filter": "Add line filter"
       },
       "pattern-controls": {
         "excluded-pattern": "Excluded pattern:",
@@ -357,6 +358,7 @@
           "title": "We did not find any {{type}} for the given time range."
         },
         "field-selector": {
+          "custom-value-search-or-filter": "Filter values by",
           "placeholder-search-values": "Search values"
         },
         "field-values-breakdown-scene": {
@@ -718,9 +720,6 @@
         "docs-link": "Instructions to enable volume in the Loki config:",
         "title": "Log volume has not been configured."
       },
-      "label": {
-        "service": "Service"
-      },
       "no-service-search-results": {
         "title": "No service matched your search."
       },
@@ -842,6 +841,27 @@
       }
     }
   },
+  "errors-analysis": {
+    "collapse": "Collapse",
+    "collapse-extra-fields": "Collapse extra fields",
+    "description": "Spot patterns and narrow down root causes by exploring how your data breaks down across key attributes. Click any value to filter your results.",
+    "discovering-fields": "Discovering attributes…",
+    "error": "Failed to load",
+    "expand": "Expand",
+    "field-input-placeholder": "Search to add more attributes",
+    "field-link-label": "View {{name}} in Logs Drilldown field tab",
+    "filter-for-value": "Filter for value",
+    "filter-out-value": "Filter out value",
+    "no-extra-fields-shown": "No extra fields shown",
+    "no-fields-detected": "No fields detected for this error group.",
+    "no-more-fields": "No more fields",
+    "no-values-found": "No values found",
+    "show-all-link-title": "Open in Logs Drilldown",
+    "show-more-fields_one": "Show {{count}} more fields",
+    "show-more-fields_other": "Show {{count}} more fields",
+    "title": "Attribute Explorer",
+    "too-many-values": "Too many values to display"
+  },
   "services": {
     "create-annotation-layers": {
       "severities": {
@@ -929,6 +949,9 @@
     },
     "suspended-embedded-logs-exploration": {
       "loading-logs-drilldown": "Loading Logs Drilldown..."
+    },
+    "suspended-loki-field-distribution": {
+      "loading": "Loading..."
     },
     "suspended-open-in-logs-drilldown-button": {
       "open-in-logs-drilldown": "Open in Logs Drilldown"
