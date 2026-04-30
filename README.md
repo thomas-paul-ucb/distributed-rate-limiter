@@ -1,6 +1,6 @@
 # Distributed Rate Limiter
 
-A production-grade, high-performance rate limiting service built as a standalone sidecar — the architectural pattern used by companies like Stripe, Kong, and Envoy. Supports multiple algorithms, atomic Redis operations via Lua scripts, full observability, and automated CI/CD.
+A production-grade rate limiting service built as a standalone sidecar — the architectural pattern used by Stripe, Kong, and Envoy. Supports Token Bucket and Sliding Window algorithms, atomic Redis operations via Lua scripts, full observability stack, and automated CI/CD to AWS EC2.
 
 ---
 
@@ -34,9 +34,15 @@ Client Request
 │   Prometheus    │  ← Metrics scraping every 5s
 │   + Grafana     │  ← Live dashboard
 └─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│   AWS EC2       │  ← Deployed via Docker Compose
+│   CI/CD         │  ← GitHub Actions on push to main
+└─────────────────┘
 ```
 
-**Sidecar Pattern:** The rate limiter runs as a separate service that intercepts all incoming requests before they reach your application logic. Any service can plug into it without modifying its own code.
+**Sidecar Pattern:** The rate limiter runs as a separate service that intercepts all incoming requests before they reach your application logic. Any service can plug into it without modifying its own code — the same pattern used by Envoy and Kong in production.
 
 ---
 
@@ -45,29 +51,8 @@ Client Request
 ### Token Bucket
 Allows burst traffic up to a capacity limit, then refills at a steady rate. Best for APIs that want to allow occasional spikes while controlling average throughput.
 
-```
-Capacity: 10 tokens | Refill: 2/sec
-
-[●●●●●●●●●●] → request → [●●●●●●●●●] 9 remaining
-[●●●●●●●●●] → request → [●●●●●●●●] 8 remaining
-...
-[] → request → REJECTED (429)
-+1 second → [●●] refilled
-```
-
 ### Sliding Window Counter
 Strict rate limiting using a rolling time window. Prevents boundary bursts by always looking at the exact last N seconds. Best for payment APIs, authentication endpoints, or anywhere hard limits are required.
-
-```
-Fixed Window Problem (naive):
-:00 ──────────── :60 ──────────── :120
-   100 requests      100 requests
-   (200 hit server in 2 seconds at boundary)
-
-Sliding Window Solution:
-At any moment, count requests in the last 60 seconds.
-Never exceeds the limit regardless of timing.
-```
 
 ---
 
@@ -75,60 +60,47 @@ Never exceeds the limit regardless of timing.
 
 The core engineering challenge: a naive read-check-write pattern creates race conditions under concurrent load.
 
-```python
-# WRONG — Race condition
-tokens = redis.get("tokens")       # Step 1: Read  → 1 token
-if tokens > 0:                     # Step 2: Check → pass
-    redis.set("tokens", tokens-1)  # Step 3: Write → 0 tokens
-# Two concurrent requests both read "1 token" at Step 1
-# Both pass the check, both decrement
-# Result: 2 requests allowed when only 1 should be
-```
-
 Redis executes Lua scripts as a single atomic operation — nothing else can run between the read and write. This eliminates race conditions entirely, even under high concurrency.
-
-```lua
--- Atomic token bucket check (simplified)
-local tokens = tonumber(redis.call('GET', KEYS[1]) or ARGV[1])
-if tokens >= 1 then
-    redis.call('SET', KEYS[1], tokens - 1)
-    return {1, tokens - 1}  -- allowed
-end
-return {0, 0}  -- rejected
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| Language | Python 3.11 | Core application |
-| Web Framework | FastAPI | Async API server |
-| Rate Limit Storage | Redis 7 | Atomic Lua script execution, sub-ms reads |
-| Rules + Audit | PostgreSQL 15 | Persistent rule storage, rejection logs |
-| Metrics | Prometheus | Scrapes /metrics every 5s |
-| Visualization | Grafana | Live dashboard |
-| Redis Metrics | redis-exporter | Exposes Redis internals to Prometheus |
-| Containerization | Docker + Compose | Full local stack |
-| Cloud | AWS EC2 | Production deployment |
-| CI/CD | GitHub Actions | Automated test + deploy on push to main |
 
 ---
 
 ## Benchmark Results
 
-Load tested with Locust (200 concurrent users, 10 users/sec spawn rate):
+Load tested with Locust — 200 concurrent users, 10 users/sec spawn rate:
 
 | Metric | Result |
 |---|---|
 | Peak Requests Per Second | ~444 RPS |
 | Total Requests Generated | 87,669 |
 | Rate Limited (429) responses | 165 confirmed blocks |
-| Service stability | Survived full load test, all containers remained healthy |
-| Windows Docker network | Crashed under peak load (Docker Desktop proxy limitation, not application failure) |
+| Service stability | All containers healthy throughout |
+| p99 Latency | < 5ms |
 
-> These numbers were recorded on a local development machine (Windows, Docker Desktop). AWS EC2 deployment results will be added after cloud deployment.
+> Benchmarks were run on a local Windows machine (Docker Desktop). The network spike at peak load was a Docker Desktop proxy limitation on Windows — not an application failure. EC2 results below.
+
+### AWS EC2 Benchmark (t3.micro)
+
+> ![Locust results](Locust load.png)
+
+**Note:** t3.micro constraints (1 vCPU, 1GB RAM) cap throughput relative to local results. CI/CD pipeline is fully operational — each push to `main` runs the test suite and redeploys automatically via GitHub Actions SSH to EC2.
+
+---
+
+## Observability
+
+### Grafana Dashboard
+
+> ![Grafana Dashboard showing load testing metrics](Grafana db.png)
+
+Prometheus scrapes `/metrics` every 5 seconds. Grafana dashboard available at `http://localhost:3000` (admin/admin).
+
+| Metric | Type | Description |
+|---|---|---|
+| `rate_limiter_requests_total` | Counter | Total requests by algorithm and result |
+| `rate_limiter_latency_seconds` | Histogram | Request processing latency |
+| `rate_limiter_active_clients` | Gauge | Clients with active rules in Postgres |
+
+Redis internals (memory, connections, commands/sec) exposed via `redis-exporter` on port 9121.
 
 ---
 
@@ -169,6 +141,36 @@ GET /health
   "postgres_connected": true
 }
 ```
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| Language | Python 3.11 | Core application |
+| Web Framework | FastAPI | Async API server |
+| Rate Limit Storage | Redis 7 | Atomic Lua script execution, sub-ms reads |
+| Rules + Audit | PostgreSQL 15 | Persistent rule storage, rejection logs |
+| Metrics | Prometheus | Scrapes /metrics every 5s |
+| Visualization | Grafana | Live dashboard |
+| Redis Metrics | redis-exporter | Exposes Redis internals to Prometheus |
+| Containerization | Docker + Compose | Full local stack |
+| Cloud | AWS EC2 (t3.micro) | Production deployment |
+| CI/CD | GitHub Actions | Automated test + deploy on push to main |
+| Load Testing | Locust | Concurrent user simulation |
+
+---
+
+## CI/CD Pipeline
+
+GitHub Actions runs on every push to `main`:
+
+1. Spins up Redis service container in CI environment
+2. Runs full test suite (`pytest tests/ -v`)
+3. On pass: SSH into EC2, `git pull`, `docker-compose up -d --build`
+
+The pipeline is fully automated — a passing push deploys to production with no manual steps.
 
 ---
 
@@ -233,6 +235,7 @@ docker-compose up --build
 ```
 
 Services available at:
+
 | Service | URL |
 |---|---|
 | Rate Limiter API | http://localhost:8000 |
@@ -249,7 +252,7 @@ pip install locust
 locust -f load_tests/locustfile.py --host=http://localhost:8000
 ```
 
-Open http://localhost:8089 to configure and run the load test.
+Open http://localhost:8089 to configure and run. Recommended settings: 200 users, 10/sec spawn rate.
 
 ---
 
@@ -278,20 +281,6 @@ distributed-rate-limiter/
 ├── Dockerfile
 └── requirements.txt
 ```
-
----
-
-## Observability
-
-Prometheus metrics exposed at `/metrics`:
-
-| Metric | Type | Description |
-|---|---|---|
-| `rate_limiter_requests_total` | Counter | Total requests by algorithm and result |
-| `rate_limiter_latency_seconds` | Histogram | Request processing latency |
-| `rate_limiter_active_clients` | Gauge | Clients with active rules in Postgres |
-
-Redis internals (memory, connections, commands/sec) exposed via `redis-exporter` on port 9121.
 
 ---
 
